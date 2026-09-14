@@ -16,10 +16,7 @@ function App() {
   const [splitCards, setSplitCards] = useState(null)
   const [activeHand, setActiveHand] = useState("main")
   const [dealerCards, setDealerCards] = useState([])
-  const [money, setMoney] = useState(() => {
-    const savedMoney = localStorage.getItem("money")
-    return savedMoney !== null ? Number(savedMoney) : 1000
-  })
+  const [money, setMoney] = useState(1000)
   const [currentBet, setCurrentBet] = useState(0)
   const [splitBet, setSplitBet] = useState(0)
   const [insuranceBet, setInsuranceBet] = useState(0)
@@ -30,10 +27,6 @@ function App() {
   useEffect(() => {
     initializeDeck()
   }, [])
-
-  useEffect(() => {
-    localStorage.setItem("money", money)
-  }, [money])
 
   const initializeDeck = async () => {
     try {
@@ -291,6 +284,7 @@ function App() {
     (splitCards && activeHand === "main" && playerCards.length === 2 && canDoubleDown(playerCards, money, currentBet)) ||
     (splitCards && activeHand === "split" && splitCards.length === 2 && canDoubleDown(splitCards, money, splitBet))
   )
+  const canSurrender = gameState === "playing" && playerCards.length === 2 && !splitCards
 
   const handleSplit = async () => {
     if (!canSplit(playerCards) || money < currentBet) return
@@ -322,3 +316,93 @@ function App() {
       }
     } else if (playerCards.length === 2 && money >= currentBet) {
       const newCards = await drawCards(deckId, 1)
+      const updated = [...playerCards, ...newCards]
+      setPlayerCards(updated)
+      setMoney((prevMoney) => prevMoney - currentBet)
+      setCurrentBet(currentBet * 2)
+      setGameState("dealerTurn")
+      dealerPlay()
+    }
+  }
+
+  const handleSurrender = () => {
+    const refundAmount = Math.floor(currentBet / 2)
+    setMoney((prevMoney) => prevMoney + refundAmount)
+    setGameState("gameOver")
+    setMessage(`Surrendered! Half bet returned (+$${refundAmount})`)
+    setMessageType("push")
+  }
+
+  return (
+    <div className="app minimalist">
+      <div className="center-title">
+        <h1>BlackJack</h1>
+      </div>
+      <div className="main-container">
+        <aside className="betting-sidebar">
+          <BettingPanel
+            money={money}
+            currentBet={currentBet}
+            onPlaceBet={placeBet}
+            gameInProgress={gameState !== "betting"}
+          />
+        </aside>
+        <div className="game-center">
+          <header className="game-header minimalist-header"></header>
+          <div className="game-area minimalist-area">
+            <Hand
+              cards={dealerCards}
+              title="Dealer"
+              hideFirstCard={gameState === "playing" || gameState === "insurancePrompt"}
+              showValue={gameState !== "playing" && gameState !== "insurancePrompt"}
+            />
+            <GameMessage message={message} type={messageType} />
+            <Hand cards={playerCards} title={splitCards ? "Player (Main)" : "Player"} />
+            {splitCards && <Hand cards={splitCards} title="Player (Split)" />}
+          </div>
+          <div className="control-area minimalist-controls">
+            {gameState === "insurancePrompt" ? (
+              <InsurancePrompt
+                insuranceAmount={Math.floor(currentBet / 2)}
+                onChoice={handleInsuranceChoice}
+              />
+            ) : (
+              <GameControls
+                onHit={hit}
+                onStand={stand}
+                onSplit={handleSplit}
+                onDoubleDown={handleDoubleDown}
+                onSurrender={handleSurrender}
+                onNewGame={newGame}
+                gameState={gameState}
+                canHit={canHit}
+                canSplit={showSplit}
+                canDoubleDown={showDoubleDown}
+                canSurrender={canSurrender}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+      {money <= 0 && (
+        <div className="game-over-overlay">
+          <div className="game-over-message">
+            <h2>Game Over!</h2>
+            <p>You're out of money!</p>
+            <button
+              onClick={() => {
+                setMoney(1000)
+                newGame()
+              }}
+              className="restart-btn"
+            >
+              Start New Game ($1000)
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default App
